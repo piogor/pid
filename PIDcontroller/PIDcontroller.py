@@ -117,6 +117,7 @@ class PIDcontroller(Device):
         # PROTECTED REGION ID(PIDcontroller.always_executed_hook) ENABLED START #
         if (time.time() - self.last_compute)>10 and self.dev_state!=PyTango.DevState.FAULT:
             self.set_state(PyTango.DevState.STANDBY)
+            self.set_status('PID is STANDBY.')
         # PROTECTED REGION END #    //  PIDcontroller.always_executed_hook
 
     def delete_device(self):
@@ -205,6 +206,7 @@ class PIDcontroller(Device):
             self.controlled_object.write_attribute(self.InputAttribute,self.cv)
             self.last_compute = current_time
             self.set_state(PyTango.DevState.RUNNING)
+            self.set_status('PID is working on line.')
         except PyTango.DevFailed:
             self.set_status('Cannot connect to controlled object!!!')
             self.set_state(PyTango.DevState.FAULT)
