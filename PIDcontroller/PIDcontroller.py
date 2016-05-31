@@ -24,6 +24,7 @@ from PyTango.server import class_property, device_property
 from PyTango import AttrQuality, AttrWriteType, DispLevel, DevState
 # Additional import
 # PROTECTED REGION ID(PIDcontroller.additionnal_import) ENABLED START #
+import time
 # PROTECTED REGION END #    //  PIDcontroller.additionnal_import
 
 
@@ -104,11 +105,18 @@ class PIDcontroller(Device):
         self.kd = 0.0
         self.ki = 0.0
         self.kp = 1.0
+        self.ev = 0.0
+        self.ev1 = 0.0
+        self.ev2 = 0.0
+        self.sp = 0.0
+        self.last_compute = 0.0
+        self.controlled_object = PyTango.DeviceProxy(self.ControlledDeviceProxy)
         # PROTECTED REGION END #    //  PIDcontroller.init_device
 
     def always_executed_hook(self):
         # PROTECTED REGION ID(PIDcontroller.always_executed_hook) ENABLED START #
-        pass
+        if (time.time() - self.last_compute)>10 and self.dev_state!=PyTango.DevState.FAULT:
+            self.set_state(PyTango.DevState.STANDBY)
         # PROTECTED REGION END #    //  PIDcontroller.always_executed_hook
 
     def delete_device(self):
@@ -137,7 +145,7 @@ class PIDcontroller(Device):
 
     def read_ErrorValue(self):
         # PROTECTED REGION ID(PIDcontroller.ErrorValue_read) ENABLED START #
-        return self.sp-self.pv
+        return self.ev
         # PROTECTED REGION END #    //  PIDcontroller.ErrorValue_read
 
     def read_KP(self):
@@ -178,7 +186,30 @@ class PIDcontroller(Device):
     @DebugIt()
     def computePID(self):
         # PROTECTED REGION ID(PIDcontroller.computePID) ENABLED START #
-        pass
+        try:
+            self.pv = self.controlled_object.read_attribute(self.OutputAttribute).value
+            self.ev2 = self.ev1
+            self.ev1 = self.ev
+            self.ev = self.sp - self.pv
+            current_time = time.time()
+            if self.last_compute > 0.0 and current_time - self.last_compute > 0.0 and self.kp!=0.0:
+                dt = current_time - self.last_compute
+                if self.ki!=0:
+                    t_ti = dt*self.kp/self.ki
+                else:
+                    t_ti = 0.0
+                td_t = self.kd/(dt*self.kp)
+                self.cv = self.cv + self.kp * ( self.ev * (1+t_ti+td_t) + self.ev1*(-1-2*td_t) + self.ev2*td_t)
+            else:
+                self.cv = self.kp*self.ev
+            self.controlled_object.write_attribute(self.InputAttribute,self.cv)
+            self.last_compute = current_time
+            self.set_state(PyTango.DevState.RUNNING)
+        except PyTango.DevFailed:
+            self.set_status('Cannot connect to controlled object!!!')
+            self.set_state(PyTango.DevState.FAULT)
+
+
         # PROTECTED REGION END #    //  PIDcontroller.computePID
 
 # ----------
